@@ -97,6 +97,7 @@ jobs:
           # --------------
           push: true
           platforms: linux/arm64
+          provenance: false
           build-args: |
             MODEL_URL=${{ matrix.url }}
             MODEL_FILE=${{ matrix.file }}
