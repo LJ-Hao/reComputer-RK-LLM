@@ -2,7 +2,7 @@
 FROM --platform=$TARGETPLATFORM python:3.10-slim AS base
 
 RUN apt-get update && \
-    apt-get install -y wget curl git sudo && \
+    apt-get install -y wget curl git sudo libgomp1 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/models
