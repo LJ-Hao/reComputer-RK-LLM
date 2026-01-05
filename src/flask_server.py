@@ -350,9 +350,16 @@ if __name__ == "__main__":
             sys.stdout.flush()
             exit()
 
-    # Fix frequency
-    command = "sudo bash fix_freq_{}.sh".format(args.target_platform)
-    subprocess.run(command, shell=True)
+    # Fix frequency - only run if on actual hardware
+    try:
+        command = "sudo bash fix_freq_{}.sh".format(args.target_platform)
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"Frequency fix script failed or not applicable in this environment: {result.stderr}")
+        else:
+            print("Frequency fix applied successfully")
+    except Exception as e:
+        print(f"Could not run frequency fix script (this is normal in Docker): {e}")
 
     # Set resource limit
     resource.setrlimit(resource.RLIMIT_NOFILE, (102400, 102400))

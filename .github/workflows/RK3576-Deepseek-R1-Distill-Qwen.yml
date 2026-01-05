@@ -19,7 +19,7 @@ jobs:
 
     strategy:
       matrix:
-        model: 
+        model:
           - name: deepseek-r1-distill-qwen-1.5b-fp16-rk3576
             target: deepseek-r1-distill-qwen-1.5b-fp16-rk3576
           - name: deepseek-r1-distill-qwen-1.5b-w4a16-rk3576
@@ -65,3 +65,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            TARGETPLATFORM=linux/arm64
+          platforms: linux/arm64
