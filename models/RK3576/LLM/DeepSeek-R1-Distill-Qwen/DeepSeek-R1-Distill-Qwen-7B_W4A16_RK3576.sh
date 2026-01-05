@@ -1,1 +1,0 @@
-wget https://huggingface.co/JiahaoLi/DeepSeek-R1-Distill-Qwen-RK3576/resolve/main/DeepSeek-R1-Distill-Qwen-7B_W4A16_RK3576.rkllm
