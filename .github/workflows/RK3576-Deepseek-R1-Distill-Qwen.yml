@@ -18,6 +18,7 @@ jobs:
       packages: write
 
     strategy:
+      fail-fast: false # 即使其中一个模型构建失败，其他也继续
       matrix:
         model:
           - name: deepseek-r1-distill-qwen-1.5b-fp16-rk3576
@@ -26,12 +27,19 @@ jobs:
             target: deepseek-r1-distill-qwen-1.5b-w4a16-rk3576
           - name: deepseek-r1-distill-qwen-7b-w4a16-rk3576
             target: deepseek-r1-distill-qwen-7b-w4a16-rk3576
-          - name: deepseek-r1-distill-owen-7b-w4a16-g128-rk3576
-            target: deepseek-r1-distill-owen-7b-w4a16-g128-rk3576
+          - name: deepseek-r1-distill-qwen-7b-w4a16-g128-rk3576
+            target: deepseek-r1-distill-qwen-7b-w4a16-g128-rk3576
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          lfs: true # 如果你的模型是用 Git LFS 存储的，必须开启此项
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -65,6 +73,4 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            TARGETPLATFORM=linux/arm64
           platforms: linux/arm64
