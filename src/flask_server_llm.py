@@ -25,6 +25,7 @@ RKLLMInputType = ctypes.c_int
 RKLLMInputType.RKLLM_INPUT_PROMPT = 0
 
 class RKLLMExtendParam(ctypes.Structure):
+    # 移除 _pack_ = 1，使用系统默认对齐，或者显式指定字段
     _fields_ = [
         ("base_domain_id", ctypes.c_int32),
         ("embed_flash", ctypes.c_int8),
@@ -34,6 +35,10 @@ class RKLLMExtendParam(ctypes.Structure):
         ("use_cross_attn", ctypes.c_int8),
         ("reserved", ctypes.c_uint8 * 104)
     ]
+
+# 在初始化时，手动强制赋值
+extend_param = RKLLMExtendParam()
+extend_param.n_batch = 1  # 显式确保不为0
 
 class RKLLMParam(ctypes.Structure):
     _fields_ = [
