@@ -13,7 +13,7 @@ import re
 app = Flask(__name__)
 
 # Set the dynamic library path
-rkllm_lib = ctypes.CDLL('lib/librkllmrt.so')
+rkllm_lib = ctypes.CDLL('/usr/lib/librkllmrt.so')
 # Define the structures from the library
 RKLLM_Handle_t = ctypes.c_void_p
 userdata = ctypes.c_void_p(None)
