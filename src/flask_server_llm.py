@@ -219,7 +219,7 @@ def chat_completions():
         global_text = []
         global_state = -1
         
-        # 构建提示词 - 简化的聊天格式
+        # 构建提示词
         prompt = ""
         for msg in messages:
             if msg['role'] == 'system':
@@ -243,47 +243,23 @@ def chat_completions():
             model_thread.start()
             
             if stream:
-                # 流式响应
+                # 流式响应 - 直接返回纯文本
                 model_thread_finished = False
                 while not model_thread_finished:
                     if global_text:
                         chunk = global_text.pop(0)
-                        response_chunk = {
-                            "id": "chatcmpl-123",
-                            "object": "chat.completion.chunk",
-                            "created": int(time.time()),
-                            "model": "rkllm-model",
-                            "choices": [{
-                                "index": 0,
-                                "delta": {"content": chunk},
-                                "finish_reason": None
-                            }]
-                        }
-                        yield f"data: {json.dumps(response_chunk, ensure_ascii=False)}\n\n"
+                        yield chunk  # 直接返回文本内容，不包装为JSON
                     
                     model_thread.join(timeout=0.01)
                     model_thread_finished = not model_thread.is_alive()
                     
                     if global_state == LLMCallState.RKLLM_RUN_FINISH:
-                        # 发送结束标记
-                        response_chunk = {
-                            "id": "chatcmpl-123",
-                            "object": "chat.completion.chunk",
-                            "created": int(time.time()),
-                            "model": "rkllm-model",
-                            "choices": [{
-                                "index": 0,
-                                "delta": {},
-                                "finish_reason": "stop"
-                            }]
-                        }
-                        yield f"data: {json.dumps(response_chunk, ensure_ascii=False)}\n\n"
                         break
                 
-                # 发送结束标记
-                yield "data: [DONE]\n\n"
+                # 添加结束标记
+                yield "[DONE]"
             else:
-                # 非流式响应
+                # 非流式响应 - 返回JSON
                 model_thread_finished = False
                 full_response = ""
                 while not model_thread_finished:
@@ -318,10 +294,12 @@ def chat_completions():
                 return json.dumps(response, ensure_ascii=False)
         
         if stream:
-            return Response(generate_response(), content_type='text/event-stream')
+            # 对于流式响应，返回纯文本流
+            return Response(generate_response(), content_type='text/plain; charset=utf-8')
         else:
+            # 对于非流式响应，返回JSON
             response_data = generate_response()
-            return Response(response_data, content_type='application/json')
+            return Response(response_data, content_type='application/json; charset=utf-8')
             
     finally:
         lock.release()
