@@ -25,7 +25,7 @@ RKLLMInputType = ctypes.c_int
 RKLLMInputType.RKLLM_INPUT_PROMPT = 0
 
 class RKLLMExtendParam(ctypes.Structure):
-    # 移除 _pack_ = 1，使用系统默认对齐，或者显式指定字段
+    _pack_ = 1 # 强制字节对齐，防止 NPU 读取错位
     _fields_ = [
         ("base_domain_id", ctypes.c_int32),
         ("embed_flash", ctypes.c_int8),
@@ -36,11 +36,8 @@ class RKLLMExtendParam(ctypes.Structure):
         ("reserved", ctypes.c_uint8 * 104)
     ]
 
-# 在初始化时，手动强制赋值
-extend_param = RKLLMExtendParam()
-extend_param.n_batch = 1  # 显式确保不为0
-
 class RKLLMParam(ctypes.Structure):
+    _pack_ = 1
     _fields_ = [
         ("model_path", ctypes.c_char_p),
         ("max_context_len", ctypes.c_int32),
@@ -107,22 +104,29 @@ callback_func = callback_type(callback_impl)
 class RKLLMModel:
     def __init__(self, model_path, platform="rk3588"):
         param = RKLLMParam()
+        # ！！！非常重要：先清空整个结构体的内存 ！！！
+        ctypes.memset(ctypes.byref(param), 0, ctypes.sizeof(param))
+        
         param.model_path = bytes(model_path, 'utf-8')
         param.max_context_len = 4096
         param.max_new_tokens = 4096
         param.top_k = 1
         param.top_p = 0.9
         param.temperature = 0.8
+        
+        # ！！！显式设置 extend_param ！！！
+        param.extend_param.n_batch = 1
+        param.extend_param.base_domain_id = 0
+        param.extend_param.embed_flash = 1
         param.extend_param.enabled_cpus_num = 4
-        param.extend_param.enabled_cpus_mask = 0xf0 # 使用大核
+        param.extend_param.enabled_cpus_mask = 0xf0 
         
         self.handle = RKLLM_Handle_t()
-        ret = rkllm_lib.rkllm_init(ctypes.byref(self.handle), ctypes.byref(param), callback_func)
-        if ret != 0: raise Exception("Init Failed")
+        print(f"DEBUG: n_batch is set to {param.extend_param.n_batch}") # 添加调试打印
         
-        self.infer_param = RKLLMInferParam()
-        self.infer_param.mode = 0
-        self.infer_param.keep_history = 0
+        ret = rkllm_lib.rkllm_init(ctypes.byref(self.handle), ctypes.byref(param), callback_func)
+        if ret != 0: 
+            raise Exception(f"Init Failed with error code: {ret}")
 
     def run(self, prompt):
         rk_input = RKLLMInput()
