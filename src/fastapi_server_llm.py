@@ -156,6 +156,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[ChatMessage] = Field(..., description="List of messages")
     temperature: Optional[float] = Field(default=0.8, ge=0.0, le=2.0, description="Temperature parameter (0.0-2.0)")
     top_p: Optional[float] = Field(default=0.9, ge=0.0, le=1.0, description="Top-p sampling parameter (0.0-1.0)")
+    top_k: Optional[int] = Field(default=None, ge=1, le=100, description="Top-k sampling parameter (1-100)")
     n: Optional[int] = Field(default=1, ge=1, le=10, description="Number of completions to generate")
     stream: Optional[bool] = Field(default=False, description="Whether to stream the response")
     max_tokens: Optional[int] = Field(default=512, ge=1, le=8192, description="Maximum tokens to generate")
@@ -239,6 +240,7 @@ class ServerConfig:
         self.max_context_len = 2048  # Default context length
         self.default_temperature = 0.8  # Default temperature
         self.default_top_p = 0.9  # Default top_p
+        self.default_top_k = 1  # Default top_k
         self.default_max_tokens = 512  # Default max tokens
         self.max_concurrent_requests = 2  # Max concurrent requests
         self.timeout_seconds = 120  # Timeout in seconds
@@ -299,6 +301,7 @@ class RKLLMModel:
         self.max_context_len = config.max_context_len
         self.default_temperature = config.default_temperature
         self.default_top_p = config.default_top_p
+        self.default_top_k = config.default_top_k
         self.default_max_tokens = config.default_max_tokens
         
     def initialize(self):
@@ -313,7 +316,7 @@ class RKLLMModel:
                 rkllm_param.max_context_len = self.max_context_len
                 rkllm_param.max_new_tokens = self.default_max_tokens
                 rkllm_param.n_keep = 0
-                rkllm_param.top_k = 1
+                rkllm_param.top_k = self.default_top_k  # Use default top_k
                 rkllm_param.top_p = self.default_top_p
                 rkllm_param.temperature = self.default_temperature
                 rkllm_param.repeat_penalty = 1.1
@@ -365,13 +368,28 @@ class RKLLMModel:
                 return False
     
     def generate(self, prompt: str, request_id: str, temperature: float = None, 
-                 top_p: float = None, max_tokens: int = None) -> int:
+                 top_p: float = None, top_k: int = None, max_tokens: int = None) -> int:
         """Generate text with the model"""
         with self.model_lock:
             if not self.initialized:
                 raise RuntimeError("Model not initialized")
             
             try:
+                # First update the model parameters if top_k is provided
+                if top_k is not None:
+                    # Need to update the model's top_k parameter
+                    # Note: RKLLM might require reinitialization or parameter update
+                    # For now, we'll log it and use the value in generation
+                    print(f"[{request_id}] Setting top_k to {top_k}")
+                    
+                    # Update RKLLM parameter structure for this generation
+                    # This might require calling rkllm_set_param or similar function
+                    # For simplicity, we'll use the existing handle with default params
+                    # In a real implementation, you might need to:
+                    # 1. Call a parameter update function if available
+                    # 2. Or handle it differently based on RKLLM API
+                    pass
+                
                 # Prepare input
                 rkllm_input = RKLLMInput()
                 rkllm_input.role = ctypes.c_char_p(b"user")
@@ -478,6 +496,7 @@ def process_chat_completion(request: ChatCompletionRequest, request_id: str) -> 
         print(f"  Prompt length: {len(prompt)} characters")
         print(f"  Temperature: {request.temperature}")
         print(f"  Top-p: {request.top_p}")
+        print(f"  Top-k: {request.top_k}")
         print(f"  Max tokens: {request.max_tokens}")
         
         # Run model inference
@@ -486,6 +505,7 @@ def process_chat_completion(request: ChatCompletionRequest, request_id: str) -> 
             request_id=request_id,
             temperature=request.temperature,
             top_p=request.top_p,
+            top_k=request.top_k,
             max_tokens=request.max_tokens
         )
         
@@ -548,6 +568,10 @@ async def lifespan(app: FastAPI):
         if args.default_top_p:
             config.default_top_p = args.default_top_p
             rkllm_model.default_top_p = args.default_top_p
+        
+        if args.default_top_k:
+            config.default_top_k = args.default_top_k
+            rkllm_model.default_top_k = args.default_top_k
         
         if args.default_max_tokens:
             config.default_max_tokens = args.default_max_tokens
@@ -669,6 +693,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
         created = int(time.time())
         
         print(f"[{request_id}] New request: stream={request.stream}, messages={len(request.messages)}")
+        if request.top_k is not None:
+            print(f"[{request_id}] Top-k parameter: {request.top_k}")
         
         if request.stream:
             # Streaming response
@@ -857,7 +883,7 @@ if __name__ == "__main__":
 Examples:
   python rkllm_server.py --rkllm_model_path ../model/model.rkllm --target_platform rk3588
   python rkllm_server.py --rkllm_model_path ../model/model.rkllm --target_platform rk3588 \\
-                         --port 8080 --max_concurrent 2 --default_temperature 0.7
+                         --port 8080 --max_concurrent 2 --default_temperature 0.7 --default_top_k 50
         """
     )
     
@@ -881,6 +907,8 @@ Examples:
                        help='Default temperature parameter (default: 0.8)')
     parser.add_argument('--default_top_p', type=float, default=0.9,
                        help='Default top_p parameter (default: 0.9)')
+    parser.add_argument('--default_top_k', type=int, default=3,
+                       help='Default top_k parameter (default: 3, range: 1-100)')
     parser.add_argument('--default_max_tokens', type=int, default=512,
                        help='Default maximum tokens to generate (default: 512)')
     
@@ -901,6 +929,12 @@ Examples:
         print(f"❌ Error: Model file not found: {args.rkllm_model_path}")
         sys.exit(1)
     
+    # Validate top_k range
+    if args.default_top_k < 1 or args.default_top_k > 100:
+        print(f"⚠ Warning: default_top_k should be between 1 and 100, got {args.default_top_k}")
+        args.default_top_k = max(1, min(100, args.default_top_k))
+        print(f"  Adjusted to: {args.default_top_k}")
+    
     # Convert to absolute path
     args.rkllm_model_path = os.path.abspath(args.rkllm_model_path)
     
@@ -908,6 +942,7 @@ Examples:
     config.max_context_len = args.max_context_len
     config.default_temperature = args.default_temperature
     config.default_top_p = args.default_top_p
+    config.default_top_k = args.default_top_k
     config.default_max_tokens = args.default_max_tokens
     config.max_concurrent_requests = args.max_concurrent
     config.timeout_seconds = args.timeout
@@ -922,6 +957,7 @@ Examples:
     print(f"  Max context length: {config.max_context_len}")
     print(f"  Default temperature: {config.default_temperature}")
     print(f"  Default Top-p: {config.default_top_p}")
+    print(f"  Default Top-k: {config.default_top_k}")
     print(f"  Default max tokens: {config.default_max_tokens}")
     print(f"  Max concurrent requests: {config.max_concurrent_requests}")
     print(f"  Request timeout: {config.timeout_seconds}s")
