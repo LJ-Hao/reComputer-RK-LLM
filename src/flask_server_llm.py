@@ -4,10 +4,83 @@ import os
 import threading
 import time
 import argparse
-from flask import Flask, request, jsonify, Response
+import asyncio
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 import json
+from pydantic import BaseModel, Field
+from typing import List, Optional, Union, Dict, Any
+from enum import Enum
+import uvicorn
 
-app = Flask(__name__)
+app = FastAPI(title="RKLLM OpenAI Compatible API", version="1.0.0")
+
+
+# Define Pydantic models for OpenAI API compatibility
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class ChatMessage(BaseModel):
+    role: MessageRole
+    content: str
+
+
+class ChatCompletionRequest(BaseModel):
+    model: Optional[str] = "rkllm-model"
+    messages: List[ChatMessage]
+    temperature: Optional[float] = 0.8
+    top_p: Optional[float] = 0.9
+    n: Optional[int] = 1
+    stream: Optional[bool] = False
+    stop: Optional[Union[str, List[str]]] = None
+    max_tokens: Optional[int] = 4096
+    presence_penalty: Optional[float] = 0.0
+    frequency_penalty: Optional[float] = 0.0
+    logit_bias: Optional[Dict[str, float]] = None
+    user: Optional[str] = None
+    n_keep: Optional[int] = 0
+    cache_prompt: Optional[bool] = False
+    id_slot: Optional[int] = 0
+    n_predict: Optional[int] = 4096
+
+
+class ChatCompletionChoice(BaseModel):
+    index: int
+    message: ChatMessage
+    finish_reason: str = "stop"
+
+
+class UsageInfo(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
+class ChatCompletionResponse(BaseModel):
+    id: str
+    object: str = "chat.completion"
+    created: int
+    model: str
+    choices: List[ChatCompletionChoice]
+    usage: UsageInfo
+
+
+class ChatCompletionStreamChoice(BaseModel):
+    index: int
+    delta: ChatMessage
+    finish_reason: Optional[str] = None
+
+
+class ChatCompletionStreamResponse(BaseModel):
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int
+    model: str
+    choices: List[ChatCompletionStreamChoice]
+
 
 # 设置动态库路径
 rkllm_lib = ctypes.CDLL('/usr/lib/librkllmrt.so')
@@ -196,118 +269,185 @@ class RKLLM(object):
     def release(self):
         self.rkllm_destroy(self.handle)
 
-# Flask 路由
-@app.route('/v1/chat/completions', methods=['POST'])
-def chat_completions():
+    def update_params(self, temperature=None, top_p=None, max_new_tokens=None,
+                     repeat_penalty=None, frequency_penalty=None, presence_penalty=None):
+        """Update model parameters dynamically"""
+        # Note: This is a simplified implementation
+        # In a real scenario, you might need to reinitialize the model with new parameters
+        if temperature is not None:
+            self.temperature = temperature
+        if top_p is not None:
+            self.top_p = top_p
+        if max_new_tokens is not None:
+            self.max_new_tokens = max_new_tokens
+        if repeat_penalty is not None:
+            self.repeat_penalty = repeat_penalty
+        if frequency_penalty is not None:
+            self.frequency_penalty = frequency_penalty
+        if presence_penalty is not None:
+            self.presence_penalty = presence_penalty
+
+async def generate_streaming_response(prompt: str, request_id: str, model_name: str):
+    """Generate streaming response for the OpenAI API"""
+    global global_text, global_state
+
+    # Reset global variables
+    global_text = []
+    global_state = -1
+
+    # Run model in a separate thread
+    model_thread = threading.Thread(target=rkllm_model.run, args=(prompt,))
+    model_thread.start()
+
+    # Send initial empty chunk
+    initial_chunk = ChatCompletionStreamResponse(
+        id=request_id,
+        created=int(time.time()),
+        model=model_name,
+        choices=[ChatCompletionStreamChoice(
+            index=0,
+            delta=ChatMessage(role=MessageRole.ASSISTANT, content=""),
+            finish_reason=None
+        )]
+    )
+    yield f"data: {initial_chunk.json()}\n\n"
+
+    # Stream the response
+    model_thread_finished = False
+    while not model_thread_finished:
+        while global_text:
+            chunk = global_text.pop(0)
+            stream_choice = ChatCompletionStreamChoice(
+                index=0,
+                delta=ChatMessage(role=MessageRole.ASSISTANT, content=chunk),
+                finish_reason=None
+            )
+            stream_resp = ChatCompletionStreamResponse(
+                id=request_id,
+                created=int(time.time()),
+                model=model_name,
+                choices=[stream_choice]
+            )
+            yield f"data: {stream_resp.json()}\n\n"
+
+        model_thread.join(timeout=0.01)
+        model_thread_finished = not model_thread.is_alive()
+
+        if global_state == LLMCallState.RKLLM_RUN_FINISH:
+            break
+
+    # Send final chunk with finish reason
+    final_chunk = ChatCompletionStreamResponse(
+        id=request_id,
+        created=int(time.time()),
+        model=model_name,
+        choices=[ChatCompletionStreamChoice(
+            index=0,
+            delta=ChatMessage(role=MessageRole.ASSISTANT, content=""),
+            finish_reason="stop"
+        )]
+    )
+    yield f"data: {final_chunk.json()}\n\n"
+    yield "data: [DONE]\n\n"
+
+
+@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def chat_completions(request: ChatCompletionRequest):
     global global_text, global_state, is_blocking
-    
+
     if is_blocking:
-        return jsonify({'error': {'message': 'Server is busy', 'type': 'server_error'}}), 503
-    
+        raise HTTPException(status_code=503, detail={"message": "Server is busy", "type": "server_error"})
+
     lock.acquire()
     try:
         is_blocking = True
-        
-        data = request.json
-        if not data or 'messages' not in data:
-            return jsonify({'error': {'message': 'Invalid request', 'type': 'invalid_request'}}), 400
-        
-        messages = data['messages']
-        stream = data.get('stream', False)
-        
-        # 重置全局变量
-        global_text = []
-        global_state = -1
-        
-        # 构建提示词
+
+        # Build prompt from messages
         prompt = ""
-        for msg in messages:
-            if msg['role'] == 'system':
-                prompt += f"{msg['content']}\n\n"
-            elif msg['role'] == 'user':
-                prompt += f"User: {msg['content']}\n"
-            elif msg['role'] == 'assistant':
-                prompt += f"Assistant: {msg['content']}\n"
-        
-        # 添加最后的 Assistant: 提示
+        for msg in request.messages:
+            if msg.role == MessageRole.SYSTEM:
+                prompt += f"{msg.content}\n\n"
+            elif msg.role == MessageRole.USER:
+                prompt += f"User: {msg.content}\n"
+            elif msg.role == MessageRole.ASSISTANT:
+                prompt += f"Assistant: {msg.content}\n"
+
+        # Add final assistant prompt
         if prompt and not prompt.endswith("Assistant: "):
             prompt += "Assistant: "
-        
+
         print(f"Prompt: {prompt}")
-        
-        def generate_response():
-            nonlocal prompt
-            
-            # 运行模型
+
+        # Update model parameters based on request
+        rkllm_model.update_params(
+            temperature=request.temperature,
+            top_p=request.top_p,
+            max_new_tokens=request.n_predict,
+            repeat_penalty=1.1,  # Default value
+            frequency_penalty=request.frequency_penalty,
+            presence_penalty=request.presence_penalty
+        )
+
+        if request.stream:
+            # Return streaming response
+            request_id = f"chatcmpl-{int(time.time())}"
+            return StreamingResponse(
+                generate_streaming_response(prompt, request_id, request.model),
+                media_type="text/event-stream"
+            )
+        else:
+            # Non-streaming response
+            # Reset global variables
+            global_text = []
+            global_state = -1
+
+            # Run model in a separate thread
             model_thread = threading.Thread(target=rkllm_model.run, args=(prompt,))
             model_thread.start()
-            
-            if stream:
-                # 流式响应 - 直接返回纯文本
-                model_thread_finished = False
-                while not model_thread_finished:
-                    if global_text:
-                        chunk = global_text.pop(0)
-                        yield chunk  # 直接返回文本内容，不包装为JSON
-                    
-                    model_thread.join(timeout=0.01)
-                    model_thread_finished = not model_thread.is_alive()
-                    
-                    if global_state == LLMCallState.RKLLM_RUN_FINISH:
-                        break
-                
-                # 添加结束标记
-                yield "[DONE]"
-            else:
-                # 非流式响应 - 返回JSON
-                model_thread_finished = False
-                full_response = ""
-                while not model_thread_finished:
-                    while global_text:
-                        full_response += global_text.pop(0)
-                    
-                    model_thread.join(timeout=0.01)
-                    model_thread_finished = not model_thread.is_alive()
-                    
-                    if global_state == LLMCallState.RKLLM_RUN_FINISH:
-                        break
-                
-                response = {
-                    "id": "chatcmpl-123",
-                    "object": "chat.completion",
-                    "created": int(time.time()),
-                    "model": "rkllm-model",
-                    "choices": [{
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": full_response
-                        },
-                        "finish_reason": "stop"
-                    }],
-                    "usage": {
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0
-                    }
-                }
-                return json.dumps(response, ensure_ascii=False)
-        
-        if stream:
-            # 对于流式响应，返回纯文本流
-            return Response(generate_response(), content_type='text/plain; charset=utf-8')
-        else:
-            # 对于非流式响应，返回JSON
-            response_data = generate_response()
-            return Response(response_data, content_type='application/json; charset=utf-8')
-            
+
+            # Wait for response
+            model_thread_finished = False
+            full_response = ""
+            while not model_thread_finished:
+                while global_text:
+                    full_response += global_text.pop(0)
+
+                model_thread.join(timeout=0.01)
+                model_thread_finished = not model_thread.is_alive()
+
+                if global_state == LLMCallState.RKLLM_RUN_FINISH:
+                    break
+
+            # Create response
+            response = ChatCompletionResponse(
+                id=f"chatcmpl-{int(time.time())}",
+                created=int(time.time()),
+                model=request.model,
+                choices=[
+                    ChatCompletionChoice(
+                        index=0,
+                        message=ChatMessage(
+                            role=MessageRole.ASSISTANT,
+                            content=full_response
+                        ),
+                        finish_reason="stop"
+                    )
+                ],
+                usage=UsageInfo(
+                    prompt_tokens=0,  # Actual token count would require tokenizer
+                    completion_tokens=len(full_response.split()),  # Approximate
+                    total_tokens=0  # Actual token count would require tokenizer
+                )
+            )
+            return response
+
     finally:
         lock.release()
         is_blocking = False
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rkllm_model_path', type=str, required=True, 
+    parser.add_argument('--rkllm_model_path', type=str, required=True,
                        help='Absolute path of the converted RKLLM model')
     parser.add_argument('--target_platform', type=str, required=True,
                        help='Target platform: e.g., rk3588/rk3576')
@@ -323,11 +463,12 @@ if __name__ == "__main__":
     print("Initializing RKLLM model...")
     rkllm_model = RKLLM(args.rkllm_model_path, args.target_platform)
     print("Model initialized successfully!")
-    
+
+
     # 启动服务器
     print(f"Starting server on port {args.port}...")
-    app.run(host='0.0.0.0', port=args.port, threaded=True, debug=False)
-    
+    uvicorn.run(app, host='0.0.0.0', port=args.port)
+
     # 清理
     rkllm_model.release()
     print("Server stopped.")
