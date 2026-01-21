@@ -9,17 +9,35 @@ docker run -it --name deepseek-r1-1.5b    --privileged    --net=host    --device
 
 使用下面命令来测试：
 
+非流式响应
 ```
-curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d '{
-"messages": [
-{"role": "user", "content": "请解释一下相对论的基本概念。"}
-],
-"n_keep": 0,
-"cache_prompt": false,
-"id_slot": 0,
-"n_predict": 512,
-"stream": true
-}'
+curl http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rkllm-model",
+    "messages": [
+      {"role": "user", "content": "请解释一下相对论的基本概念。"}
+    ],
+    "temperature": 0.8,
+    "max_tokens": 512,
+    "stream": false
+  }'
+```
+
+流式响应：
+
+```
+curl -N http://127.0.0.1:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rkllm-model",
+    "messages": [
+      {"role": "user", "content": "请解释一下相对论的基本概念。"}
+    ],
+    "temperature": 0.8,
+    "max_tokens": 512,
+    "stream": true
+  }'
 ```
 
 或者使用OpenAI Python包进行测试：

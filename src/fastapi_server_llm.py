@@ -2,6 +2,7 @@
 """
 RKLLM OpenAI API Compatible Server
 Supports complete OpenAI API parameters including temperature, top_p, max_tokens, etc.
+FIXED: Pydantic v2 compatibility issues in streaming responses
 """
 
 import ctypes
@@ -678,7 +679,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                     # Submit task to thread pool
                     future = executor.submit(process_chat_completion, request, request_id)
                     
-                    # Send initial message
+                    # Send initial message - FIXED: use model_dump_json() instead of json()
                     initial_chunk = ChatCompletionStreamResponse(
                         id=request_id,
                         created=created,
@@ -691,7 +692,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                             )
                         ]
                     )
-                    yield f"data: {initial_chunk.json(ensure_ascii=False)}\n\n"
+                    yield f"data: {initial_chunk.model_dump_json(exclude_unset=True, ensure_ascii=False)}\n\n"
                     
                     # Stream results
                     start_time = time.time()
@@ -716,7 +717,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
                                                 )
                                             ]
                                         )
-                                        yield f"data: {chunk.json(ensure_ascii=False)}\n\n"
+                                        # FIXED: use model_dump_json() instead of json()
+                                        yield f"data: {chunk.model_dump_json(exclude_unset=True, ensure_ascii=False)}\n\n"
                                         last_activity = time.time()
                                     
                                     # Clear sent text
@@ -742,7 +744,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                         # Brief wait
                         await asyncio.sleep(0.05)
                     
-                    # Send completion marker
+                    # Send completion marker - FIXED: use model_dump_json() instead of json()
                     done_chunk = ChatCompletionStreamResponse(
                         id=request_id,
                         created=created,
@@ -755,7 +757,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                             )
                         ]
                     )
-                    yield f"data: {done_chunk.json(ensure_ascii=False)}\n\n"
+                    yield f"data: {done_chunk.model_dump_json(exclude_unset=True, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
                     
                 except Exception as e:
