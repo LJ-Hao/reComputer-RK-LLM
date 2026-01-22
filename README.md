@@ -1,16 +1,15 @@
 # Start inference
 
-```
-docker pull ghcr.io/lj-hao/rk3588-deepseek-r1-distill-qwen:1.5b-w8a8-latest
-
-docker run -it --name deepseek-r1-1.5b    --privileged    --net=host    --device /dev/dri    --device /dev/dma_heap    --device /dev/rknpu    --device /dev/mali0    -v /dev:/dev      ghcr.io/lj-hao/rk3588-deepseek-r1-distill-qwen:1.5b-w8a8-latest
-
+```bash
+docker run -it --name deepseek-r1-1.5b-fp16   --privileged    --net=host    --device /dev/dri    --device /dev/dma_heap    --device /dev/rknpu    --device /dev/mali0    -v /dev:/dev      ghcr.io/lj-hao/rk3588-deepseek-r1-distill-qwen:1.5b-fp16-latest
 ```
 
+>Note: When you start the service, you can access `http://localhost:8080/docs` and `http://localhost:8080/redoc` to view the documentation.
 # Test API：
 
 ## Non-streaming response：
-```
+
+```bash
 curl http://127.0.0.1:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -18,16 +17,16 @@ curl http://127.0.0.1:8080/v1/chat/completions \
     "messages": [
       {"role": "user", "content": "Where is the capital of China？"}
     ],
-    "temperature": 2,
+    "temperature": 1,
     "max_tokens": 512,
-    ""
+    "top_k": 1,
     "stream": false
   }'
 ```
 
 ## Streaming response:
 
-```
+```bash
 curl -N http://127.0.0.1:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -37,6 +36,7 @@ curl -N http://127.0.0.1:8080/v1/chat/completions \
     ],
     "temperature": 2,
     "max_tokens": 512,
+    "top_k": 1,
     "stream": true
   }'
 ```
@@ -96,3 +96,15 @@ for chunk in response_stream:
     if chunk.choices[0].delta.content is not None:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
+
+# Speed test
+
+> Note: A rough estimate of a model's inference speed includes both TTFT and TPOT.
+
+```bash
+python -m venv .env && source .env/bin/activate
+pip install requests
+python test_inference_speed.py
+```
+
+> Note: You can use `python test_inference_speed.py --help` to view the help function.

@@ -907,8 +907,8 @@ Examples:
                        help='Default temperature parameter (default: 0.8)')
     parser.add_argument('--default_top_p', type=float, default=0.9,
                        help='Default top_p parameter (default: 0.9)')
-    parser.add_argument('--default_top_k', type=int, default=3,
-                       help='Default top_k parameter (default: 3, range: 1-100)')
+    parser.add_argument('--default_top_k', type=int, default=1,
+                       help='Default top_k parameter (default: 1, range: 1-100)')
     parser.add_argument('--default_max_tokens', type=int, default=512,
                        help='Default maximum tokens to generate (default: 512)')
     
