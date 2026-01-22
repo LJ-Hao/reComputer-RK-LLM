@@ -1,7 +1,15 @@
 # Start inference
 
+## For RK3588
+
 ```bash
 docker run -it --name deepseek-r1-1.5b-fp16   --privileged    --net=host    --device /dev/dri    --device /dev/dma_heap    --device /dev/rknpu    --device /dev/mali0    -v /dev:/dev      ghcr.io/lj-hao/rk3588-deepseek-r1-distill-qwen:1.5b-fp16-latest
+```
+
+## For RK3576
+
+```bash
+docker run -it --name deepseek-r1-1.5b-fp16   --privileged    --net=host    --device /dev/dri    --device /dev/dma_heap    --device /dev/rknpu    --device /dev/mali0    -v /dev:/dev      ghcr.io/lj-hao/rk3576-deepseek-r1-distill-qwen:1.5b-fp16-latest
 ```
 
 >Note: When you start the service, you can access `http://localhost:8080/docs` and `http://localhost:8080/redoc` to view the documentation.
