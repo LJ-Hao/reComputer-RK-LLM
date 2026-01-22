@@ -114,6 +114,7 @@ for chunk in response_stream:
 # Speed test
 
 > Note: A rough estimate of a model's inference speed includes both TTFT and TPOT.
+> Note: You can use `python test_inference_speed.py --help` to view the help function.
 
 ```bash
 python -m venv .env && source .env/bin/activate
@@ -121,4 +122,3 @@ pip install requests
 python test_inference_speed.py
 ```
 
-> Note: You can use `python test_inference_speed.py --help` to view the help function.
