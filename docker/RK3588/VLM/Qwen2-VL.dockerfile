@@ -16,8 +16,7 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY ./lib/librkllmrt.so /usr/lib/librkllmrt.so 
 COPY ./lib/librkllm_service.so /usr/lib/librkllm_service.so 
 COPY ./lib/librknnrt.so /usr/lib/librknnrt.so
-COPY ./lib/libmali.so.1 /usr/lib/libmali.so.1      
-COPY ./lib/libOpenCL.so /usr/lib/libOpenCL.so      
+     
 
 COPY ./src/fix_freq_rk3588.sh /app/fix_freq_rk3588.sh
 RUN chmod +x /app/fix_freq_rk3588.sh
