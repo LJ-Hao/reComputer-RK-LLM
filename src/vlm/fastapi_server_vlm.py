@@ -538,7 +538,7 @@ class ServerConfig:
         self.img_start = "<|image_start|>"
         self.img_end = "<|image_end|>"
         self.img_content = "<|image_content|>"
-        self.library_path = "../build_native/librkllm_service.so.1.0.0"
+        self.library_path = "/usr/lib/librkllm_service.so"
 
 config = ServerConfig()
 
