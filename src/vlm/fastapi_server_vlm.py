@@ -1039,7 +1039,7 @@ Examples:
     parser.add_argument('--img_content', type=str, default='<|image_content|>',
                        help='Image content token (default: <|image_content|>)')
     
-    parser.add_argument('--library_path', type=str, default='../build_native/librkllm_service.so.1.0.0',
+    parser.add_argument('--library_path', type=str, default='/usr/lib/librkllm_service.so',
                        help='Path to RKLLM service library')
     
     parser.add_argument('--debug', action='store_true',
