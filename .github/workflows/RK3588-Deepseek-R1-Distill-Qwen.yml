@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, master ]
     paths:
-      - 'src/**'
+      - 'src/llm/**'
       - 'docker/RK3588/LLM/DeepSeek-R1-Distill-Qwen.dockerfile'
       - '.github/workflows/RK3588-Deepseek-R1-Distill-Qwen.yml'
   workflow_dispatch:
