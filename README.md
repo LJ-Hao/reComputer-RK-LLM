@@ -1,10 +1,15 @@
+[![Contributors][contributors-shield]][contributors-url]
+[![Forks][forks-shield]][forks-url]
+[![Stargazers][stars-shield]][stars-url]
+[![Issues][issues-shield]][issues-url]
+[![MIT License][license-shield]][license-url]
+[![Huggingface][huggingface-shield]][huggingface-url]
+
 # Install Docker
 
 ```bash
 curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh 
 ```
-
-# Start inference
 
 # Start inference
 
@@ -38,6 +43,8 @@ docker run -it --name deepseek-r1-1.5b-fp16 \
 | **RK3588** | [rk3588-qwen2-vl:7b-w8a8-latest](https://github.com/LJ-Hao/reComputer-RK-LLM/pkgs/container/rk3588-qwen2-vl/666595093?tag=7b-w8a8-latest)<br>[rk3588-qwen2-vl:2b-w8a8-latest](https://github.com/LJ-Hao/reComputer-RK-LLM/pkgs/container/rk3588-qwen2-vl/666591327?tag=2b-w8a8-latest)<br> | 
 | **RK3576** | [rk3576-qwen2.5-vl:3b-w4a16-latest](https://github.com/LJ-Hao/reComputer-RK-LLM/pkgs/container/rk3576-qwen2.5-vl)<br>| 
 
+
+For example:
 ```bash
 sudo docker run -it --name qwen2.5-3b-w4a16-vl \
   --privileged \
@@ -52,12 +59,13 @@ sudo docker run -it --name qwen2.5-3b-w4a16-vl \
 
 >Note: When you start the service, you can access `http://localhost:8002/docs` and `http://localhost:8002/redoc` to view the documentation.
 
-# LLM
-## Commandline
-### Non-streaming response：
+# API Test
+## LLM
+### Commandline
+#### Non-streaming response：
 
 ```bash
-curl http://127.0.0.1:8080/v1/chat/completions \
+curl http://127.0.0.1:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "rkllm-model",
@@ -71,10 +79,10 @@ curl http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-### Streaming response:
+#### Streaming response:
 
 ```bash
-curl -N http://127.0.0.1:8080/v1/chat/completions \
+curl -N http://127.0.0.1:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "rkllm-model",
@@ -88,16 +96,16 @@ curl -N http://127.0.0.1:8080/v1/chat/completions \
   }'
 ```
 
-## Use OpenAI API
+### Use OpenAI API
 
-### Non-streaming response：
+#### Non-streaming response：
 
 ```python
 import openai
 
 # Configure the OpenAI client to use your local server
 client = openai.OpenAI(
-    base_url="http://localhost:8080/v1",  # Point to your local server
+    base_url="http://localhost:8001/v1",  # Point to your local server
     api_key="dummy-key"  # The API key can be anything for this local server
 )
 
@@ -115,14 +123,14 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)
 ```
 
-### Streaming response:
+#### Streaming response:
 
 ```python
 import openai
 
 # Configure the OpenAI client to use your local server
 client = openai.OpenAI(
-    base_url="http://localhost:8080/v1",  # Point to your local server
+    base_url="http://localhost:8001/v1",  # Point to your local server
     api_key="dummy-key"  # The API key can be anything for this local server
 )
 
@@ -144,6 +152,80 @@ for chunk in response_stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
+## VLM
+### Commandline
+#### Non-streaming response：
+
+```bash
+curl -X POST http://localhost:8002/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rkllm-vision",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe the image"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://github.com/LJ-Hao/reComputer-RK-LLM/blob/main/img/test.jpeg"
+            }
+          }
+        ]
+      }
+    ],
+    "stream": false,
+    "max_tokens": 50
+  }'
+
+```
+
+#### Streaming response:
+
+```bash
+curl -X POST http://localhost:8002/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "rkllm-vision",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe the image"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://github.com/LJ-Hao/reComputer-RK-LLM/blob/main/img/test.jpeg"
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true,
+    "max_tokens": 50
+  }'
+```
+### Use OpenAI API
+
+#### Non-streaming response：
+
+```python
+
+```
+
+
+#### Streaming response:
+
+```python
+
+```
 # Speed test
 
 > Note: A rough estimate of a model's inference speed includes both TTFT and TPOT.
@@ -155,3 +237,28 @@ pip install requests
 python test_inference_speed.py
 ```
 
+# 💞 Top contributors:
+
+<a href="https://github.com/Seeed-Projects/reComputer-RK-LLM/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Seeed-Projects/reComputer-RK-LLM" alt="contrib.rocks image" />
+</a>
+
+# 🌟 Star History
+
+![Star History Chart](https://api.star-history.com/svg?repos=Seeed-Projects/reComputer-RK-LLM&type=Date)
+
+Reference: [rknn-llm](https://github.com/airockchip/rknn-llm/tree/main)
+
+
+[contributors-shield]: https://img.shields.io/github/contributors/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[contributors-url]: https://github.com/Seeed-Projects/reComputer-RK-LLM/graphs/contributors
+[forks-shield]: https://img.shields.io/github/forks/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[forks-url]: https://github.com/Seeed-Projects/reComputer-RK-LLM/network/members
+[stars-shield]: https://img.shields.io/github/stars/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[stars-url]: https://github.com/Seeed-Projects/reComputer-RK-LLM/stargazers
+[issues-shield]: https://img.shields.io/github/issues/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[issues-url]: https://github.com/Seeed-Projects/reComputer-RK-LLM/issues
+[license-shield]: https://img.shields.io/github/license/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[license-url]: https://github.com/Seeed-Projects/reComputer-RK-LLM/blob/master/LICENSE.txt
+[huggingface-shield]: https://img.shields.io/github/license/Seeed-Projects/reComputer-RK-LLM.svg?style=for-the-badge
+[huggingface-url]: https://huggingface.co/JiahaoLi
